@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CreativeHunter - Hunter de criativos</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>CreativeHunter</h1>
+        <p class="subtitle">
+            {{ mensagem or "Hunter de criativos: Instagram Reels/Posts • TikTok • Facebook Ads • +1.000 sites" }}
+        </p>
+        
+        <form method="post">
+            <div class="input-group">
+                <input
+                    type="url"
+                    name="url"
+                    id="url-input"
+                    value=""
+                    placeholder="https://instagram.com/p/DM6m0pJsVtU/"
+                    required
+                    autocomplete="off"
+                >
+                
+                <button type="submit" name="tipo" value="video" id="video-btn">📹 Vídeo/Reel</button>
+                <button type="submit" name="tipo" value="imagem" id="image-btn">🖼️ Foto/Post</button>
+            </div>
+        </form>
+        
+        <div id="progress-container" style="display:none;">
+            <div class="progress-header">
+                <h4 id="progress-title">🔍 Detectando...</h4>
+                <span id="progress-status">Analisando conteúdo...</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill">0%</div>
+            </div>
+            <div class="progress-info">
+                <span id="progress-percent">0%</span>
+                <span id="progress-filename">downloads/...</span>
+            </div>
+        </div>
+        
+        <hr>
+        <h3>📁 Downloads Recentes <span id="file-count">(Live)</span></h3>
+        <div id="files-grid" class="files-grid">
+            {% if arquivos %}
+                {% for f in arquivos %}
+                    <div class="file-item">
+                        <a href="{{ url_for('download', filename=f) }}" download title="{{ f }}">
+                            {{ f[:55] }}{% if f|length > 55 %}...{% endif %}
+                        </a>
+                        <small>{{ f.rsplit('.', 1)[-1]|upper }}</small>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty">📥 Seu primeiro criativo baixado aparecerá aqui!</div>
+            {% endif %}
+        </div>
+        
+        <footer class="rodape">
+            CreativeHunter por Pablo Nunes de Oliveira · 
+            <a href="https://github.com/pablonoliveira" target="_blank">GitHub</a> · 
+            Agência Pétala · Mar/2026
+        </footer>
+    </div>
+
+    <script>
+        const socket = io();
+        const urlInput = document.getElementById('url-input');
+        const videoBtn = document.getElementById('video-btn');
+        const imageBtn = document.getElementById('image-btn');
+        
+        socket.on('download_start', function() {
+            document.getElementById('progress-container').style.display = 'block';
+            urlInput.disabled = true;
+            videoBtn.disabled = imageBtn.disabled = true;
+            videoBtn.textContent = imageBtn.textContent = '⏳ Em andamento...';
+        });
+        
+        socket.on('progress_update', function(data) {
+            document.getElementById('progress-title').textContent = data.filename;
+            document.getElementById('progress-status').textContent = data.status;
+            document.getElementById('progress-percent').textContent = Math.round(data.progress)+'%';
+            document.getElementById('progress-filename').textContent = data.filename;
+            
+            const fill = document.getElementById('progress-fill');
+            fill.style.width = data.progress + '%';
+            fill.textContent = Math.round(data.progress) + '%';
+        });
+        
+        socket.on('download_complete', function() {
+            setTimeout(() => {
+                urlInput.disabled = false;
+                videoBtn.disabled = imageBtn.disabled = false;
+                videoBtn.textContent = '📹 Vídeo/Reel';
+                imageBtn.textContent = '🖼️ Foto/Post';
+                urlInput.value = '';
+                document.getElementById('progress-container').style.display = 'none';
+                updateFilesLive();
+            }, 2000);
+        });
+        
+        socket.on('download_error', function() {
+            urlInput.disabled = false;
+            videoBtn.disabled = imageBtn.disabled = false;
+            videoBtn.textContent = '📹 Vídeo/Reel';
+            imageBtn.textContent = '🖼️ Foto/Post';
+            document.getElementById('progress-container').style.display = 'none';
+        });
+        
+        async function updateFilesLive() {
+            try {
+                const res = await fetch('/api/files');
+                const files = await res.json();
+                const grid = document.getElementById('files-grid');
+                document.getElementById('file-count').textContent = `(${files.length})`;
+                
+                if (files.length) {
+                    grid.innerHTML = files.slice(0,8).map(f => `
+                        <div class="file-item">
+                            <a href="/download/${encodeURIComponent(f)}" download title="${f}">
+                                ${f.length>55?f.slice(0,55)+'...':f}
+                            </a>
+                            <small>${f.split('.').pop().toUpperCase()}</small>
+                        </div>
+                    `).join('');
+                }
+            } catch(e) {}
+        }
+    </script>
+</body>
+</html>

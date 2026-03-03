@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+env.bak/
+venv.bak/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.dmypy.json
+dmypy.json
+.pytest_cache/
+
+# VS Code
+.vscode/settings.json
+.vscode/tasks.json
+.vscode/launch.json
+.vscode/.vscodeignore
+
+# IDEs
+.idea/
+*.swp
+*.swo
+*~
+
+# Ambiente Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs
+*.log
+
+# Arquivos temporários
+*.tmp
+*.temp
+
+# Docker
+.dockerignore
+
+# Arquivos do sistema
+.DS_Store
+.DS_Store?
+
+# ARQUIVOS IMPORTANTES - NÃO COMMITAR
+downloads/
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.webm
+*.m4a
+*.mp3
+
+# Ambiente virtual específico do projeto
+venv/
+
+# Pip freeze específico
+pip-wheel-metadata/

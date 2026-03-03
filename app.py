@@ -150,5 +150,8 @@ def get_files():
 
 if __name__ == '__main__':
     os.makedirs(PASTA_DOWNLOADS, exist_ok=True)
-    print("🔥 CreativeHunter rodando em http://localhost:5000")
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    port = int(os.getenv('PORT', 5000))
+    debug_mode = os.getenv('DEBUG', 'False') == 'True'
+    
+    print(f"🔥 CreativeHunter rodando em porta {port}")
+    socketio.run(app, host='0.0.0.0', port=port, debug=debug_mode)

@@ -36,20 +36,6 @@ python app.py
 Acesse: **http://localhost:5000**
 
 ---
-
-## 🌐 Versão Live
-
-**CreativeHunter está rodando na nuvem com Railway!**
-
-🔗 **URL Pública**: [https://creativehunter-production.up.railway.app](https://creativehunter-production.up.railway.app)
-
-- ✅ **24/7 Online**
-- ✅ **Deploy automático** (GitHub → Railway)
-- ✅ **Grátis** (Railway free tier)
-- ✅ **Atualiza** a cada push no GitHub
-
----
-
 ## ✨ Funcionalidades
 
 ### 📹 Vídeo/Reel

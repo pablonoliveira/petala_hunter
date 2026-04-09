@@ -68,7 +68,7 @@ def montar_opcoes_ydl(tipo):
         })
     else:
         opcoes_base.update({
-            "format": "bestvideo[height<=1080]+bestaudio/best"
+            "format": "best[ext=mp4]/best"
         })
 
     return opcoes_base

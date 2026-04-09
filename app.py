@@ -5,15 +5,11 @@ Download automático em máxima qualidade + RENOMEAÇÃO PERFEITA.
 Versão PROD: Flask + yt-dlp com renomeação inteligente de carrossel.
 Resolve TODOS os casos: foto única, múltiplas fotos, vídeos.
 """
-
 from flask import Flask, request, render_template, send_from_directory
 import os
 import re
 import yt_dlp
 from pathlib import Path
-from collections import defaultdict
-import time
-
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "petala-hunter-2026"
@@ -23,7 +19,6 @@ os.makedirs(PASTA_DOWNLOADS, exist_ok=True)
 
 
 def listar_arquivos():
-    """Lista os 12 arquivos mais recentes da pasta downloads."""
     if not os.path.exists(PASTA_DOWNLOADS):
         return []
 
@@ -31,11 +26,11 @@ def listar_arquivos():
         f for f in os.listdir(PASTA_DOWNLOADS)
         if os.path.isfile(os.path.join(PASTA_DOWNLOADS, f))
     ]
-    return sorted(arquivos, reverse=True)[:12]
+    arquivos.sort(key=lambda f: os.path.getmtime(os.path.join(PASTA_DOWNLOADS, f)), reverse=True)
+    return arquivos[:12]
 
 
 def sanitizar_mensagem_erro(erro):
-    """Converte erros técnicos em mensagens amigáveis para o usuário."""
     msg = str(erro)
 
     if "There is no video in this post" in msg:
@@ -51,22 +46,20 @@ def sanitizar_mensagem_erro(erro):
         return "❌ O conteúdo exige autenticação ou não está acessível publicamente."
 
     if "File name too long" in msg:
-        return "❌ Nome do arquivo muito longo. Correção aplicada no salvamento."
+        return "❌ Nome do arquivo muito longo. O app agora renomeia automaticamente."
 
     return f"❌ Erro ao processar o link: {msg[:160]}"
 
 
 def limpar_nome_arquivo(texto):
-    """Remove caracteres inválidos e limita tamanho do nome do arquivo."""
-    if not texto:
-        return "arquivo"
-    texto = re.sub(r'[\\/*?:"<>|=&%]', "", str(texto))
+    texto = texto or "arquivo"
+    texto = str(texto)
+    texto = re.sub(r'[\\/*?:"<>|=&%#]+', "", texto)
     texto = re.sub(r"\s+", "_", texto).strip("_")
-    return texto[:60]
+    return texto[:80] or "arquivo"
 
 
 def montar_opcoes_ydl(tipo):
-    """Configurações do yt-dlp com nome temporário curto."""
     nome_saida = os.path.join(PASTA_DOWNLOADS, "%(extractor)s_%(id)s.%(ext)s")
 
     opcoes_base = {
@@ -92,98 +85,119 @@ def montar_opcoes_ydl(tipo):
     return opcoes_base
 
 
-def encontrar_arquivos_novos(arquivos_antes):
-    """Encontra arquivos criados após o download."""
-    arquivos_depois = set(os.listdir(PASTA_DOWNLOADS))
-    novos = arquivos_depois - arquivos_antes
-    return [os.path.join(PASTA_DOWNLOADS, f) for f in novos if os.path.isfile(os.path.join(PASTA_DOWNLOADS, f))]
+def snapshot_arquivos():
+    if not os.path.exists(PASTA_DOWNLOADS):
+        return {}
+    dados = {}
+    for nome in os.listdir(PASTA_DOWNLOADS):
+        caminho = os.path.join(PASTA_DOWNLOADS, nome)
+        if os.path.isfile(caminho):
+            dados[nome] = os.path.getmtime(caminho)
+    return dados
 
 
-def renomear_carrossel(arquivos_novos, info, tipo):
-    """
-    Renomeia arquivos de carrossel com sufixos _1, _2, _3...
-    
-    RESULTADO FINAL:
-    ✅ facebook_1417545490408392_1.jpg
-    ✅ facebook_1417545490408392_2.jpg  
-    ✅ facebook_1417545490408392_3.jpg
-    ✅ instagram_reel123.mp4
-    """
-    if not arquivos_novos:
+def arquivos_novos(antes, depois):
+    novos = []
+
+    for nome, mtime in depois.items():
+        if nome not in antes or antes[nome] != mtime:
+            caminho = os.path.join(PASTA_DOWNLOADS, nome)
+            if os.path.isfile(caminho):
+                novos.append(caminho)
+
+    novos.sort(key=os.path.getmtime)
+    return novos
+
+
+def montar_base_nome(info):
+    if not isinstance(info, dict):
+        return "arquivo_sem_id"
+
+    extractor = limpar_nome_arquivo(
+        info.get("extractor_key") or info.get("extractor") or "arquivo"
+    )
+    media_id = limpar_nome_arquivo(str(info.get("id") or "sem_id"))
+
+    return f"{extractor}_{media_id}"
+
+
+def renomear_arquivos_baixados(novos, info, tipo):
+    if not novos:
         return []
 
-    # Extrai informações do vídeo/post principal
-    extractor = limpar_nome_arquivo(info.get("extractor") or info.get("extractor_key") or "generic")
-    media_id = limpar_nome_arquivo(str(info.get("id") or "sem_id"))
-    base_nome = f"{extractor}_{media_id}"
-    
-    if tipo == "imagem":
-        extensoes = [".jpg", ".jpeg", ".png"]
-    else:
-        extensoes = [".mp4", ".webm"]
-
+    base_nome = montar_base_nome(info)
     renomeados = []
-    
-    # Ordena por data de criação (mais recente primeiro)
-    arquivos_ordenados = sorted(arquivos_novos, key=os.path.getctime, reverse=True)
-    
-    for i, caminho in enumerate(arquivos_ordenados, 1):
+
+    extensoes_imagem = {".jpg", ".jpeg", ".png", ".webp"}
+    extensoes_video = {".mp4", ".mkv", ".webm", ".mov"}
+
+    arquivos_midia = []
+    for caminho in novos:
         ext = Path(caminho).suffix.lower()
-        
-        # Só renomeia arquivos de mídia relevantes
-        if ext in extensoes:
-            novo_nome = f"{base_nome}_{i}{ext}"
-            novo_caminho = os.path.join(PASTA_DOWNLOADS, novo_nome)
-            
-            # Evita sobrescrita
-            contador = i
-            while os.path.exists(novo_caminho):
-                contador += 1
-                novo_nome = f"{base_nome}_{contador}{ext}"
-                novo_caminho = os.path.join(PASTA_DOWNLOADS, novo_nome)
-            
-            os.replace(caminho, novo_caminho)
-            renomeados.append(novo_nome)
-    
+        if tipo == "imagem" and ext in extensoes_imagem:
+            arquivos_midia.append(caminho)
+        elif tipo == "video" and ext in extensoes_video:
+            arquivos_midia.append(caminho)
+
+    if not arquivos_midia:
+        return []
+
+    for indice, caminho_atual in enumerate(arquivos_midia, start=1):
+        ext = Path(caminho_atual).suffix.lower()
+
+        if len(arquivos_midia) == 1:
+            novo_nome = f"{base_nome}{ext}"
+        else:
+            novo_nome = f"{base_nome}_{indice}{ext}"
+
+        novo_nome = limpar_nome_arquivo(Path(novo_nome).stem) + ext
+        novo_caminho = os.path.join(PASTA_DOWNLOADS, novo_nome)
+
+        contador = 1
+        while os.path.exists(novo_caminho) and os.path.abspath(novo_caminho) != os.path.abspath(caminho_atual):
+            if len(arquivos_midia) == 1:
+                candidato = f"{base_nome}_{contador}{ext}"
+            else:
+                candidato = f"{base_nome}_{indice}_{contador}{ext}"
+
+            candidato = limpar_nome_arquivo(Path(candidato).stem) + ext
+            novo_caminho = os.path.join(PASTA_DOWNLOADS, candidato)
+            contador += 1
+
+        if os.path.abspath(caminho_atual) != os.path.abspath(novo_caminho):
+            os.replace(caminho_atual, novo_caminho)
+
+        renomeados.append(os.path.basename(novo_caminho))
+
     return renomeados
 
 
 def baixar_arquivo(url, tipo):
-    """
-    Download + renomeação inteligente de carrossel.
-    
-    Detecta automaticamente:
-    - Foto única → facebook_123.jpg
-    - Carrossel → facebook_123_1.jpg, facebook_123_2.jpg...
-    - Vídeo único → instagram_abc.mp4
-    """
-    arquivos_antes = set(os.listdir(PASTA_DOWNLOADS))
+    antes = snapshot_arquivos()
     opcoes = montar_opcoes_ydl(tipo)
 
     with yt_dlp.YoutubeDL(opcoes) as ydl:
         info = ydl.extract_info(url, download=True)
 
-    arquivos_novos = encontrar_arquivos_novos(arquivos_antes)
-    arquivos_renomeados = renomear_carrossel(arquivos_novos, info, tipo)
+    depois = snapshot_arquivos()
+    novos = arquivos_novos(antes, depois)
+    renomeados = renomear_arquivos_baixados(novos, info, tipo)
 
-    # Mensagem de sucesso
+    if renomeados:
+        if len(renomeados) == 1:
+            return f"✅ Download concluído com sucesso: {renomeados[0]}"
+        return f"✅ Download concluído com sucesso: {len(renomeados)} arquivos renomeados"
+
     if isinstance(info, dict) and info.get("entries"):
-        total = len([e for e in info["entries"] if e])
-        if arquivos_renomeados:
-            return f"✅ Carrossel salvo: {len(arquivos_renomeados)} arquivos ({', '.join(arquivos_renomeados[:3])}{'...' if len(arquivos_renomeados) > 3 else ''})"
+        total = len([item for item in info["entries"] if item])
         return f"✅ Download concluído. {total} arquivo(s) salvo(s) com sucesso."
-    
-    if arquivos_renomeados:
-        nomes = ', '.join(arquivos_renomeados[:2]) + ('...' if len(arquivos_renomeados) > 2 else '')
-        return f"✅ {nomes}"
-    
-    nome_default = limpar_nome_arquivo(info.get("title")) if isinstance(info, dict) else "arquivo"
-    return f"✅ Download concluído: {nome_default}"
+
+    titulo = limpar_nome_arquivo(info.get("title")) if isinstance(info, dict) else "arquivo"
+    return f"✅ Download concluído com sucesso: {titulo}"
 
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    """Rota principal."""
     mensagem = None
 
     if request.method == "POST":
@@ -206,7 +220,6 @@ def index():
 
 @app.route("/download/<path:filename>")
 def download_file(filename):
-    """Download seguro dos arquivos salvos."""
     nome_seguro = os.path.basename(filename)
     return send_from_directory(PASTA_DOWNLOADS, nome_seguro, as_attachment=True)
 
@@ -215,8 +228,6 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     debug_mode = os.getenv("DEBUG", "False") == "True"
 
-    print(f"🌸 Pétala Hunter PROD rodando na porta {port}")
-    print("✅ Renomeação inteligente de carrossel habilitada")
-    print("✅ Nomes perfeitos: facebook_123_1.jpg, facebook_123_2.jpg...")
-    print("✅ Suporte Meta Ads, Instagram, TikTok")
+    print(f"🌸 Pétala Hunter rodando na porta {port}")
+    print("✅ Renomeação pós-download ativada")
     app.run(host="0.0.0.0", port=port, debug=debug_mode)

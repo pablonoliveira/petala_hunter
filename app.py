@@ -5,16 +5,15 @@ Download automático em máxima qualidade.
 Versão PROD: Flask + yt-dlp com nomes curtos e sanitizados para Railway
 Corrige definitivamente o erro 'File name too long' em fotos/posts do Facebook.
 """
-
 from flask import Flask, request, render_template, send_from_directory
 import os
 import re
 import yt_dlp
+from pathlib import Path
 
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "petala-hunter-2026"
-
 
 PASTA_DOWNLOADS = "downloads"
 os.makedirs(PASTA_DOWNLOADS, exist_ok=True)
@@ -49,7 +48,7 @@ def sanitizar_mensagem_erro(erro):
         return "❌ O conteúdo exige autenticação ou não está acessível publicamente."
 
     if "File name too long" in msg:
-        return "❌ Nome do arquivo muito longo. Correção já aplicada, tente novamente."
+        return "❌ Nome do arquivo muito longo. Correção aplicada no salvamento."
 
     return f"❌ Erro ao processar o link: {msg[:160]}"
 
@@ -57,32 +56,17 @@ def sanitizar_mensagem_erro(erro):
 def limpar_nome_arquivo(texto):
     """Remove caracteres inválidos e limita tamanho do nome do arquivo."""
     texto = texto or "arquivo"
-    texto = re.sub(r'[\\/*?:"<>|]', "", texto)
-    texto = re.sub(r"\s+", " ", texto).strip()
-    return texto[:120]
+    texto = re.sub(r'[\\/*?:"<>|=&]', "", texto)
+    texto = re.sub(r"\s+", "_", texto).strip("_")
+    return texto[:80]
 
 
 def montar_opcoes_ydl(tipo):
     """
-    Configurações otimizadas do yt-dlp para Pétala Hunter.
-    
-    ✅ Para IMAGEM (Foto/Post):
-    - outtmpl: "facebook_1417545490408392.jpg" (curto e previsível)
-    - restrictfilenames + windowsfilenames: sanitiza caracteres especiais
-    - Formatos: JPG > JPEG > PNG > melhor disponível
-    
-    ✅ Para VÍDEO (Reel):
-    - best[ext=mp4]/best: MP4 nativo sem FFmpeg
-    - Estável no Railway/Heroku
-    
-    ✅ COMUM:
-    - Nomes curtos evitam 'File name too long'
-    - Playlist habilitada para carrossel
+    Configura opções do yt-dlp.
+    Mantém nome temporário curto e depois renomeia no pós-download.
     """
-    nome_saida = os.path.join(
-        PASTA_DOWNLOADS,
-        "%(extractor)s_%(id)s.%(ext)s"  # Ex: facebook_1417545490408392.jpg
-    )
+    nome_saida = os.path.join(PASTA_DOWNLOADS, "%(extractor)s_%(id)s.%(ext)s")
 
     opcoes_base = {
         "outtmpl": nome_saida,
@@ -90,9 +74,9 @@ def montar_opcoes_ydl(tipo):
         "no_warnings": True,
         "noplaylist": False,
         "extract_flat": False,
-        "windowsfilenames": True,      # Sanitiza para Windows
-        "restrictfilenames": True,     # Remove caracteres especiais
-        "trim_file_name": 80,          # Limita tamanho do nome
+        "windowsfilenames": True,
+        "restrictfilenames": True,
+        "trim_file_name": 80,
     }
 
     if tipo == "imagem":
@@ -101,38 +85,91 @@ def montar_opcoes_ydl(tipo):
         })
     else:
         opcoes_base.update({
-            "format": "best[ext=mp4]/best"  # Sem FFmpeg no Railway
+            "format": "best[ext=mp4]/best"
         })
 
     return opcoes_base
 
 
+def encontrar_arquivo_recente(antes, depois):
+    """Identifica o arquivo novo criado após o download."""
+    novos = list(depois - antes)
+    if novos:
+        caminhos = [os.path.join(PASTA_DOWNLOADS, f) for f in novos]
+        caminhos = [c for c in caminhos if os.path.isfile(c)]
+        if caminhos:
+            return max(caminhos, key=os.path.getmtime)
+    return None
+
+
+def renomear_arquivo_final(caminho_atual, info, tipo):
+    """
+    Renomeia o arquivo salvo para um padrão limpo e curto.
+    Exemplo:
+    - facebook_1417545490408392.jpg
+    - instagram_CxYz123.mp4
+    """
+    if not caminho_atual or not os.path.exists(caminho_atual):
+        return caminho_atual
+
+    ext = Path(caminho_atual).suffix.lower() or ".bin"
+
+    extractor = "arquivo"
+    media_id = "sem_id"
+
+    if isinstance(info, dict):
+        extractor = limpar_nome_arquivo(info.get("extractor") or info.get("extractor_key") or "arquivo")
+        media_id = limpar_nome_arquivo(str(info.get("id") or "sem_id"))
+
+    if tipo == "imagem":
+        novo_nome = f"{extractor}_{media_id}{ext}"
+    else:
+        novo_nome = f"{extractor}_{media_id}{ext}"
+
+    novo_caminho = os.path.join(PASTA_DOWNLOADS, novo_nome)
+
+    contador = 1
+    while os.path.exists(novo_caminho) and os.path.abspath(novo_caminho) != os.path.abspath(caminho_atual):
+        base = f"{extractor}_{media_id}_{contador}"
+        novo_caminho = os.path.join(PASTA_DOWNLOADS, f"{base}{ext}")
+        contador += 1
+
+    if os.path.abspath(caminho_atual) != os.path.abspath(novo_caminho):
+        os.replace(caminho_atual, novo_caminho)
+
+    return novo_caminho
+
+
 def baixar_arquivo(url, tipo):
     """
-    Executa o download com as configurações otimizadas.
-    
-    Suporta:
-    - Meta Ads Library (Facebook/Instagram)
-    - Instagram Reels
-    - TikTok
-    - Posts com carrossel (múltiplas imagens)
+    Executa o download e força renomeação limpa no final.
     """
     opcoes = montar_opcoes_ydl(tipo)
+    arquivos_antes = set(os.listdir(PASTA_DOWNLOADS))
 
     with yt_dlp.YoutubeDL(opcoes) as ydl:
         info = ydl.extract_info(url, download=True)
 
+    arquivos_depois = set(os.listdir(PASTA_DOWNLOADS))
+
     if isinstance(info, dict) and info.get("entries"):
-        total = len([item for item in info["entries"] if item])
+        total = 0
+        for entrada in info["entries"]:
+            if not entrada:
+                continue
+            total += 1
         return f"✅ Download concluído. {total} arquivo(s) salvo(s) com sucesso."
 
-    titulo = limpar_nome_arquivo(info.get("title")) if isinstance(info, dict) else "arquivo"
-    return f"✅ Download concluído com sucesso: {titulo}"
+    caminho_novo = encontrar_arquivo_recente(arquivos_antes, arquivos_depois)
+    caminho_final = renomear_arquivo_final(caminho_novo, info, tipo)
+
+    nome_final = os.path.basename(caminho_final) if caminho_final else "arquivo"
+    return f"✅ Download concluído com sucesso: {nome_final}"
 
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    """Rota principal - GET mostra interface, POST processa download."""
+    """Rota principal."""
     mensagem = None
 
     if request.method == "POST":
@@ -155,7 +192,7 @@ def index():
 
 @app.route("/download/<path:filename>")
 def download_file(filename):
-    """Download seguro dos arquivos salvos."""
+    """Faz o download do arquivo salvo."""
     nome_seguro = os.path.basename(filename)
     return send_from_directory(PASTA_DOWNLOADS, nome_seguro, as_attachment=True)
 
@@ -165,6 +202,5 @@ if __name__ == "__main__":
     debug_mode = os.getenv("DEBUG", "False") == "True"
 
     print(f"🌸 Pétala Hunter rodando na porta {port}")
-    print("✅ Correção 'File name too long' aplicada!")
-    print("✅ Suporte Meta Ads Library, Instagram, TikTok")
+    print("✅ Renomeação pós-download habilitada")
     app.run(host="0.0.0.0", port=port, debug=debug_mode)

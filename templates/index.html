@@ -1,78 +1,98 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pétala Hunter | Agência Pétala</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pétala Hunter</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <main class="container">
-    <header>
-      <h1>Pétala Hunter</h1>
-      <p class="subtitle" style="white-space: pre-line;">
-        **Caçador de criativos para Meta Ads, Reels e TikTok**
-        Download automático em máxima qualidade.
-      </p>         
-    </header>
+    <main class="page-shell">
+        <section class="container">
+            <header class="hero">
+                <h1>Pétala Hunter</h1>
+                <p class="subtitle">
+                    <strong>Caçador de criativos para Meta Ads, Reels e TikTok</strong><br>
+                    Download automático em máxima qualidade.
+                </p>
+            </header>
 
-    <form method="POST" action="/" novalidate>
-      <div class="input-group">
-        <input
-          type="url"
-          name="url"
-          placeholder="Cole a URL da Meta Ads Library, Instagram, TikTok ou outro link suportado"
-          required
-        >
-      </div>
+            <form method="POST" class="download-form">
+                <label for="url" class="sr-only">URL do criativo</label>
+                <div class="input-group">
+                    <input
+                        type="url"
+                        id="url"
+                        name="url"
+                        placeholder="Cole a URL da Meta Ads Library, Instagram, TikTok ou outro link suportado"
+                        value="{{ url_atual or '' }}"
+                        required
+                    >
+                </div>
 
-      <div class="mode-buttons">
-        <button id="video-btn" class="mode-btn active" type="submit" name="tipo" value="video">
-          📹 Baixar Vídeo/Reel
-        </button>
-        <button id="image-btn" class="mode-btn inactive" type="submit" name="tipo" value="imagem">
-          🖼️ Baixar Foto/Post
-        </button>
-      </div>
-    </form>
+                <div class="mode-buttons">
+                    <button
+                        type="submit"
+                        name="tipo"
+                        value="video"
+                        id="video-btn"
+                        class="mode-btn {% if tipo_atual == 'video' %}active{% else %}inactive{% endif %}"
+                    >
+                        🎬 Baixar Vídeo/Reel
+                    </button>
+                    <button
+                        type="submit"
+                        name="tipo"
+                        value="imagem"
+                        id="image-btn"
+                        class="mode-btn {% if tipo_atual == 'imagem' %}active{% else %}inactive{% endif %}"
+                    >
+                        🖼️ Baixar Foto/Post
+                    </button>
+                </div>
+            </form>
 
-    {% if mensagem %}
-      {% if '❌' in mensagem %}
-        <div class="alert alert-error">{{ mensagem }}</div>
-      {% else %}
-        <div class="alert alert-success">{{ mensagem }}</div>
-      {% endif %}
-    {% else %}
-      <div class="alert alert-success">
-        Cole um link acima e escolha o modo desejado para baixar o criativo.
-      </div>
-    {% endif %}
+            {% if plataforma %}
+            <p class="source-badge">Fonte detectada: <strong>{{ plataforma }}</strong></p>
+            {% endif %}
 
-    <hr>
+            {% if mensagem %}
+                {% if tipo_alerta == 'success' %}
+                    <div class="alert alert-success">{{ mensagem }}</div>
+                {% elif tipo_alerta == 'error' %}
+                    <div class="alert alert-error">{{ mensagem }}</div>
+                {% else %}
+                    <div class="alert alert-info">{{ mensagem }}</div>
+                {% endif %}
+            {% endif %}
 
-    <section>
-      <h3>📂 Downloads Recentes</h3>
+            <hr>
 
-      {% if arquivos %}
-        <div class="files-grid">
-          {% for arquivo in arquivos %}
-            <div class="file-item">
-              <a href="{{ url_for('download_file', filename=arquivo) }}">{{ arquivo }}</a>
-              <small>Clique para baixar o arquivo salvo</small>
-            </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        <div class="empty">
-          Nenhum criativo baixado ainda. Seu próximo download aparecerá aqui.
-        </div>
-      {% endif %}
-    </section>
+            <section class="downloads-section">
+                <h2>📂 Downloads da sessão</h2>
+                <p class="section-helper">A lista abaixo mostra apenas os arquivos baixados desde que a aplicação foi iniciada.</p>
 
-    <footer class="rodape">
-      Pétala Hunter · Agência Pétala. Todos os direitos reservados. <br>
-      Desenvolvido por <a href="https://www.agenciapetala.com.br" target="_blank">Agência Pétala</a>.
-    </footer>
-  </main>
+                {% if arquivos %}
+                <div class="files-grid">
+                    {% for arquivo in arquivos %}
+                    <article class="file-item">
+                        <a href="{{ url_for('download_file', filename=arquivo) }}">{{ arquivo }}</a>
+                        <small>Clique para baixar o arquivo salvo.</small>
+                    </article>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty">
+                    Nenhum criativo baixado ainda nesta sessão. Seu próximo download aparecerá aqui.
+                </div>
+                {% endif %}
+            </section>
+
+            <footer class="rodape">
+                <p>Pétala Hunter · Agência Pétala. Todos os direitos reservados.</p>
+                <p>Desenvolvido por <a href="https://agenciapetala.com" target="_blank" rel="noopener noreferrer">Agência Pétala</a>.</p>
+            </footer>
+        </section>
+    </main>
 </body>
 </html>

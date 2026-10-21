@@ -1,0 +1,8 @@
+[
+  { "plataforma": "Meta Ads Library", "modo": "video",  "url": "https://www.facebook.com/ads/library/?id=COLE_AQUI_ID_DE_ANUNCIO_EM_VIDEO" },
+  { "plataforma": "Meta Ads Library", "modo": "imagem", "url": "https://www.facebook.com/ads/library/?id=COLE_AQUI_ID_DE_ANUNCIO_EM_IMAGEM" },
+  { "plataforma": "Instagram",        "modo": "video",  "url": "https://www.instagram.com/reel/COLE_AQUI/" },
+  { "plataforma": "Instagram",        "modo": "imagem", "url": "https://www.instagram.com/p/COLE_AQUI/" },
+  { "plataforma": "TikTok",           "modo": "video",  "url": "https://www.tiktok.com/@perfil/video/COLE_AQUI" },
+  { "plataforma": "Facebook",         "modo": "video",  "url": "https://www.facebook.com/reel/COLE_AQUI" }
+]

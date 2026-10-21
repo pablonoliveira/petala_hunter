@@ -11,6 +11,18 @@ PASTA_DOWNLOADS = "downloads"
 os.makedirs(PASTA_DOWNLOADS, exist_ok=True)
 
 ARQUIVOS_SESSAO = []
+
+# Impersonação de navegador (necessária para o TikTok). Requer: pip install curl_cffi
+try:
+    import curl_cffi  # noqa: F401
+    from yt_dlp.networking.impersonate import ImpersonateTarget
+    IMPERSONATE_ALVO = ImpersonateTarget.from_str("chrome")
+except Exception:  # noqa: BLE001
+    IMPERSONATE_ALVO = None
+
+PLATAFORMAS_COM_IMPERSONATE = {"TikTok"}
+ERROS_SEM_VIDEO = ("No video formats found", "There is no video in this post", "Requested format is not available")
+TIPOS_IMAGEM = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}
 DEBUG_LOGS = os.getenv("DEBUG_LOGS", "True") == "True"
 
 
@@ -99,7 +111,7 @@ def sanitizar_mensagem_erro(erro, tipo=None, url=None):
     return f"❌ Erro ao processar o link de {plataforma}: {msg[:180]}"
 
 
-def montar_opcoes_ydl(tipo, formato_personalizado=None):
+def montar_opcoes_ydl(tipo, formato_personalizado=None, plataforma=None):
     nome_saida = os.path.join(PASTA_DOWNLOADS, "%(extractor)s_%(id)s.%(ext)s")
     opcoes = {
         "outtmpl": nome_saida,
@@ -111,6 +123,9 @@ def montar_opcoes_ydl(tipo, formato_personalizado=None):
         "restrictfilenames": True,
         "trim_file_name": 80,
     }
+
+    if plataforma in PLATAFORMAS_COM_IMPERSONATE and IMPERSONATE_ALVO is not None:
+        opcoes["impersonate"] = IMPERSONATE_ALVO
 
     if formato_personalizado:
         opcoes.update({"format": formato_personalizado})
@@ -214,11 +229,11 @@ def extrair_com_fallback(url, tipo, plataforma):
 
     if tipo == "video" and plataforma == "Meta Ads Library":
         tentativas = [
-            ("padrao-meta", montar_opcoes_ydl(tipo, "best[ext=mp4]/best")),
-            ("fallback-meta", montar_opcoes_ydl(tipo, "bestvideo+bestaudio/best")),
+            ("padrao-meta", montar_opcoes_ydl(tipo, "best[ext=mp4]/best", plataforma)),
+            ("fallback-meta", montar_opcoes_ydl(tipo, "bestvideo+bestaudio/best", plataforma)),
         ]
     else:
-        tentativas = [("padrao", montar_opcoes_ydl(tipo))]
+        tentativas = [("padrao", montar_opcoes_ydl(tipo, None, plataforma))]
 
     ultimo_erro = None
 
@@ -236,13 +251,96 @@ def extrair_com_fallback(url, tipo, plataforma):
     raise ultimo_erro
 
 
+def melhor_imagem(item):
+    """Escolhe a maior imagem disponível num item extraído pelo yt-dlp."""
+    candidatas = []
+    for chave in ("display_url", "original_image_url"):
+        if item.get(chave):
+            candidatas.append((10**9, item[chave]))
+    for t in item.get("thumbnails") or []:
+        if t.get("url"):
+            area = (t.get("width") or 0) * (t.get("height") or 0)
+            candidatas.append((area or t.get("preference") or 0, t["url"]))
+    if not candidatas and item.get("thumbnail"):
+        candidatas.append((0, item["thumbnail"]))
+    return max(candidatas, key=lambda c: c[0])[1] if candidatas else None
+
+
+def imagens_meta_ads(ydl, url):
+    """A Meta Ads Library traz as imagens do anúncio em snapshot.images / snapshot.cards,
+    mas o extrator do yt-dlp só aproveita vídeos. Reaproveitamos o próprio extrator
+    (que já faz a verificação de cookie do Facebook) para ler a página e pegar as imagens."""
+    import json as _json
+    from yt_dlp.utils import traverse_obj, get_first, url_or_none
+
+    ie = ydl.get_info_extractor("FacebookAds")
+    ad_id = ie._match_id(url)
+    webpage = ie._download_fb_webpage_and_verify(url, ad_id)
+    post_data = traverse_obj(
+        re.findall(r"data-sjs>({.*?ScheduledServerJS.*?})</script>", webpage), (..., {_json.loads}))
+    data = get_first(post_data, (
+        "require", ..., ..., ..., "__bbox", "require", ..., ..., ..., (
+            ("__bbox", "result", "data", "ad_library_main", "deeplink_ad_archive_result", "deeplink_ad_archive"),
+            ("entryPointRoot", "otherProps", "deeplinkAdCard"),
+        ), "snapshot", {dict})) or {}
+    urls = []
+    for item in traverse_obj(data, (("images", "cards"), ...)) or []:
+        if not isinstance(item, dict):
+            continue
+        candidata = url_or_none(item.get("original_image_url")) or url_or_none(item.get("resized_image_url"))
+        if candidata and candidata not in urls:
+            urls.append(candidata)
+    return urls
+
+
+def coletar_urls_imagens(ydl, url, plataforma, info):
+    """Lista as URLs de imagem de um link sem vídeo (posts de foto, carrosséis, anúncios em imagem)."""
+    itens = [i for i in (info.get("entries") or [info]) if i] if info else []
+    urls = [u for u in (melhor_imagem(i) for i in itens) if u]
+    if plataforma == "Meta Ads Library":
+        try:
+            urls = imagens_meta_ads(ydl, url) or urls
+        except Exception as erro:  # noqa: BLE001
+            log_debug(f"Leitura das imagens do anúncio falhou: {erro}")
+    return urls
+
+
+def baixar_imagens_estaticas(url, plataforma):
+    """Fallback do modo Foto/Post: o yt-dlp extrai os dados mas não salva imagens
+    de posts/anúncios sem vídeo. Aqui pegamos a maior imagem de cada item e salvamos."""
+    opcoes = montar_opcoes_ydl("imagem", None, plataforma)
+    opcoes.update({"ignore_no_formats_error": True, "skip_download": True})
+    with yt_dlp.YoutubeDL(opcoes) as ydl:
+        info = ydl.extract_info(url, download=False)
+        salvos = 0
+        for indice, url_imagem in enumerate(coletar_urls_imagens(ydl, url, plataforma, info), start=1):
+            resposta = ydl.urlopen(url_imagem)
+            tipo_conteudo = (resposta.headers.get("Content-Type") or "").split(";")[0].strip()
+            ext = TIPOS_IMAGEM.get(tipo_conteudo, ".jpg")
+            nome = f"tmp_imagem_{indice}{ext}"
+            with open(os.path.join(PASTA_DOWNLOADS, nome), "wb") as arquivo:
+                arquivo.write(resposta.read())
+            salvos += 1
+    if not salvos:
+        raise RuntimeError("Nenhuma imagem encontrada neste link.")
+    log_debug(f"Fallback de imagem estática: {salvos} imagem(ns) salva(s)")
+    return info
+
+
 def baixar_arquivo(url, tipo):
     plataforma = detectar_plataforma(url)
     antes = snapshot_arquivos()
     log_debug(f"Início do processamento | plataforma={plataforma} | tipo={tipo} | url={url}")
     log_debug(f"Arquivos antes: {list(antes.keys())}")
 
-    info = extrair_com_fallback(url, tipo, plataforma)
+    try:
+        info = extrair_com_fallback(url, tipo, plataforma)
+    except Exception as erro:  # noqa: BLE001
+        if tipo == "imagem" and any(t in str(erro) for t in ERROS_SEM_VIDEO):
+            log_debug("Sem vídeo no link: tentando salvar a imagem estática")
+            info = baixar_imagens_estaticas(url, plataforma)
+        else:
+            raise
 
     depois = snapshot_arquivos()
     log_debug(f"Arquivos depois: {list(depois.keys())}")

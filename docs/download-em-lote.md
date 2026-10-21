@@ -50,7 +50,7 @@ O `id` é a **Identificação da biblioteca** que aparece no anúncio (o número
 
 ## 3. Executar
 
-No Windows, dê dois cliques em `BAIXAR_REFERENCIAS.bat` ou rode no terminal:
+No Windows, dê dois cliques em `BAIXAR_REFERENCIAS.bat` ou rode no terminal (o `.bat` usa direto o Python do `venv`):
 
 ```powershell
 .\BAIXAR_REFERENCIAS.bat              # baixa toda a lista

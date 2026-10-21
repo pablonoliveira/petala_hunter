@@ -48,9 +48,30 @@ O núcleo atual do projeto é baseado em:
 ```txt
 Flask>=3.0.3
 yt-dlp>=2026.08.19
+curl_cffi
 ```
 
-> O extrator da Meta Ads Library muda com frequência. Se os downloads começarem a falhar, atualize com `pip install -U yt-dlp`.
+| Pacote | Para quê |
+|---|---|
+| `Flask` | Interface web |
+| `yt-dlp` | Motor de extração. O extrator da Meta Ads Library muda com frequência: se os downloads começarem a falhar, atualize com `pip install -U yt-dlp` |
+| `curl_cffi` | Impersonação de navegador, necessária para o **TikTok**. Sem ele, o TikTok responde "Unexpected response from webpage request" |
+
+## Solução de problemas no Windows
+
+- **`Fatal error in launcher: Unable to create process`** ao rodar `pip`: o venv foi copiado de outra pasta e o atalho `pip.exe` aponta para o caminho antigo. Use `python -m pip install ...` ou recrie o venv:
+
+  ```powershell
+  deactivate
+  Remove-Item -Recurse -Force venv
+  python -m venv venv
+  .\venv\Scripts\Activate.ps1
+  python -m pip install -r requirements.txt
+  ```
+
+- **`O termo 'X.bat' não é reconhecido`** no PowerShell: rode com `.\` na frente, ex.: `.\BAIXAR_REFERENCIAS.bat`.
+- **Acentos aparecendo como `�`** no terminal: rode `chcp 65001` antes. É só exibição; os arquivos e commits ficam corretos.
+- Os atalhos `.bat` usam direto `venv\Scripts\python.exe` (sem depender do `activate.bat`), então funcionam mesmo com o venv copiado de outra pasta.
 
 ## Variáveis e execução
 

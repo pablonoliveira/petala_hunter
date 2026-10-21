@@ -17,29 +17,27 @@ Download automático de mídias para análise de campanhas, com interface web si
 
 O **Pétala Hunter** é uma aplicação Flask voltada à captura de criativos a partir de URLs públicas de plataformas como Meta Ads Library, Instagram Reels, TikTok e Facebook. O fluxo atual permite colar um link, escolher o tipo de mídia e baixar o arquivo diretamente pela interface, salvando o resultado na pasta `downloads/` com nomes padronizados e mais limpos.
 
-O projeto usa **Flask** para a interface web e **yt-dlp** como motor de extração. Quando necessário, os arquivos baixados passam por um processo de renomeação inteligente para facilitar organização, especialmente em casos com múltiplos itens no mesmo conteúdo.
-
 ## Funcionalidades
 
 - Download de mídia por URL pública.
 - Suporte a dois modos de captura: **vídeo** e **imagem**.
 - Integração com `yt-dlp` para extração dos conteúdos suportados.
 - Renomeação automática dos arquivos após o download.
-- Lista dos downloads mais recentes na interface.
-- Mensagens de erro tratadas para cenários comuns.
-- Estrutura simples para execução local ou deploy leve.
+- **Imagens de posts e anúncios sem vídeo** (Instagram e Meta Ads Library) salvas automaticamente no modo Foto/Post.
+- **TikTok** com impersonação de navegador (`curl_cffi`) para passar pela proteção anti-robô.
 - **Download em lote** de criativos da Meta Ads Library direto para as pastas de cada cliente (ex.: Google Drive para Desktop), com log em CSV.
+- **Teste por plataforma** (`testar_plataformas.py`) para conferir rapidamente o que está funcionando.
 
 ## Plataformas contempladas
 
-As plataformas abaixo aparecem no posicionamento atual do projeto e no fluxo descrito da aplicação:
+| Plataforma | Vídeo | Imagem | Observação |
+|---|---|---|---|
+| Meta Ads Library | ✅ | ✅ | Imagem lida dos dados do anúncio (fallback próprio) |
+| Instagram | ✅ Reels | ✅ Posts | Foto salva pelo fallback de imagem estática |
+| TikTok | ✅ | — | Requer `curl_cffi` (impersonação de navegador) |
+| Facebook | ✅ Reels | — | Alguns conteúdos podem exigir autenticação |
 
-| Plataforma | Objetivo no projeto | Observação |
-|---|---|---|
-| Meta Ads Library | Captura de criativos públicos | Sujeito às capacidades e mudanças do `yt-dlp` |
-| Instagram Reels | Download de mídia pública | Pode depender de disponibilidade pública do conteúdo |
-| TikTok | Download de mídia pública | Pode variar conforme URL e restrições do post |
-| Facebook | Download de mídia pública | Alguns conteúdos podem exigir autenticação |
+> Status verificado com `testar_plataformas.py` (simulação) em 21/10/2026, yt-dlp 2026.08.19. Veja [Teste por plataforma](docs/testes.md).
 
 ## Início rápido
 
@@ -63,6 +61,7 @@ petala_hunter/
 ├── BAIXAR_REFERENCIAS.bat     # atalho para Windows
 ├── clientes.exemplo.json      # modelo de configuração dos clientes
 ├── referencias.exemplo.json   # modelo da lista de anúncios
+├── testar_plataformas.py      # teste por plataforma (+ .bat e .exemplo.json)
 ├── requirements.txt
 ├── templates/ e static/       # front-end
 ├── docs/                      # documentação detalhada
@@ -76,6 +75,7 @@ petala_hunter/
 | [Instalação e execução](docs/instalacao.md) | Requisitos, instalação no Linux/Windows, dependências e variáveis |
 | [Interface web](docs/interface-web.md) | Fluxo de download, nomenclatura dos arquivos e tratamento de erros |
 | [Download em lote](docs/download-em-lote.md) | Configuração por cliente, opções, log CSV e limite do Facebook |
+| [Teste por plataforma](docs/testes.md) | Como verificar Meta, Instagram, TikTok e Facebook |
 | [Limitações e roadmap](docs/limitacoes-e-roadmap.md) | Pontos de atenção e melhorias planejadas |
 | [Segurança e deploy](docs/seguranca-e-deploy.md) | Boas práticas antes de publicar e execução com Gunicorn |
 

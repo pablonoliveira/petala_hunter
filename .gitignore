@@ -69,3 +69,11 @@ venv/
 
 # Pip freeze específico
 pip-wheel-metadata/
+
+# Logs
+*.log
+log_download_*.csv
+
+# Dados dos clientes - NÃO COMMITAR
+clientes.json
+referencias.json

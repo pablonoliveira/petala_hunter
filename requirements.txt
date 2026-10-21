@@ -1,2 +1,4 @@
-Flask>=3.0.0,<4.0.0
-yt-dlp>=2026.3.17
+Flask>=3.0.3
+# O extrator da Biblioteca de Anúncios muda com frequência: mantenha o yt-dlp atualizado
+#   pip install -U yt-dlp
+yt-dlp>=2026.08.19

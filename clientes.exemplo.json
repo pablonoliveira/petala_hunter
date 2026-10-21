@@ -1,0 +1,14 @@
+{
+  "raiz": "G:\\Meu Drive\\MINHA AGENCIA",
+  "clientes": {
+    "Cliente Exemplo": {
+      "pasta": "01-CLIENTE EXEMPLO",
+      "subpasta": "Pesquisa de Anúncios"
+    },
+    "Cliente Exemplo - Campanha B": {
+      "pasta": "01-CLIENTE EXEMPLO",
+      "subpasta": "Pesquisa de Anúncios",
+      "prefixo": "CampanhaB_"
+    }
+  }
+}
